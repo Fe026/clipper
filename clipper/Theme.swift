@@ -75,3 +75,15 @@ struct ColorTheme {
     static let badgeSourceApp = Color.blue.opacity(0.8)
     static let badgeTime = Color.secondary
 }
+
+extension View {
+    @ViewBuilder
+    func applyGlassEffect(in shape: some Shape) -> some View {
+        #if compiler(>=6.3)
+        self.glassEffect(in: shape)
+        #else
+        self.background(.ultraThinMaterial, in: shape)
+        #endif
+    }
+}
+

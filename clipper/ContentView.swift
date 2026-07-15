@@ -57,7 +57,7 @@ struct ContentView: View {
         }
         // 2. その後に最大高さを制限し、コンテンツを常に「上詰め(.top)」に配置する
         .frame(maxHeight: LayoutMetrics.maxWindowHeight, alignment: .top)
-        .glassEffect(in: .rect(cornerRadius: 14.0))
+        .applyGlassEffect(in: .rect(cornerRadius: 14.0))
         .clipShape(.rect(cornerRadius: 14.0))
     }
 }
@@ -135,7 +135,7 @@ extension ContentView {
         }
         .padding(.horizontal, LayoutMetrics.searchBarHorizontalPadding)
         .padding(.vertical, LayoutMetrics.searchBarVerticalPadding)
-        .glassEffect(in: .rect(cornerRadius: LayoutMetrics.searchBarCornerRadius))
+        .applyGlassEffect(in: .rect(cornerRadius: LayoutMetrics.searchBarCornerRadius))
         .padding(.horizontal, LayoutMetrics.windowHorizontal)
         .padding(.top, LayoutMetrics.searchBarTop)
     }
