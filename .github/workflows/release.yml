@@ -1,0 +1,57 @@
+name: Release Clipper
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and Package
+    runs-on: macos-14
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Build macOS App
+        run: |
+          xcodebuild -project clipper.xcodeproj \
+            -scheme clipper \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGNING_ALLOWED=YES \
+            clean build
+
+      - name: Create DMG Package
+        run: |
+          cd build/Build/Products/Release
+          mkdir dmg_root
+          cp -R clipper.app dmg_root/
+          hdiutil create -volname "Clipper" -srcfolder dmg_root -ov -format UDZO ../../../../clipper.dmg
+          cd -
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clipper-dmg
+          path: clipper.dmg
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: clipper.dmg
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
