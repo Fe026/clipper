@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import Combine
+import OSLog
 
 @MainActor
 class ClipboardManager: ObservableObject {
@@ -12,12 +13,12 @@ class ClipboardManager: ObservableObject {
     private var isMonitoring = true
     
     @Published var maxItems: Int
-    private let maxItemsKey = "max_items"
-    private let userDefaultsKey = "clipboard_history"
     private let vKeyCode: CGKeyCode = 0x09 // 'v' key code
+    private let pasteSimulationDelay: TimeInterval = 0.1
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "clipper", category: "ClipboardManager")
     
     init() {
-        let savedMax = UserDefaults.standard.integer(forKey: "max_items")
+        let savedMax = UserDefaults.standard.integer(forKey: UserDefaultsKeys.maxItems)
         self.maxItems = savedMax == 0 ? 1000 : savedMax
         self.changeCount = pasteboard.changeCount
         loadItems()
@@ -68,9 +69,9 @@ class ClipboardManager: ObservableObject {
             let rtfData = pasteboard.data(forType: .rtf)
             let htmlData = pasteboard.data(forType: .html)
             
-            print("[Clipper Debug] Copied Text: \(text.prefix(30))...")
-            print("[Clipper Debug] RTF Data size: \(rtfData?.count ?? 0) bytes")
-            print("[Clipper Debug] HTML Data size: \(htmlData?.count ?? 0) bytes")
+            logger.debug("Copied Text: \(text.prefix(30), privacy: .public)...")
+            logger.debug("RTF Data size: \(rtfData?.count ?? 0) bytes")
+            logger.debug("HTML Data size: \(htmlData?.count ?? 0) bytes")
             
             // コピー元のアプリ名を取得（可能な場合）
             var sourceAppName: String? = nil
@@ -138,16 +139,25 @@ class ClipboardManager: ObservableObject {
         self.saveItems()
         
         // システムイベントでCommand+Vを入力し貼り付けを実行
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + pasteSimulationDelay) {
             self.simulatePaste()
         }
     }
     
     private func simulatePaste() {
-        let src = CGEventSource(stateID: .hidSystemState)
-        guard let keyDown = CGEvent(keyboardEventSource: src, virtualKey: vKeyCode, keyDown: true) else { return }
+        guard let src = CGEventSource(stateID: .hidSystemState) else {
+            logger.error("Failed to create CGEventSource for simulating paste")
+            return
+        }
+        guard let keyDown = CGEvent(keyboardEventSource: src, virtualKey: vKeyCode, keyDown: true) else {
+            logger.error("Failed to create keyDown CGEvent for simulating paste")
+            return
+        }
         keyDown.flags = CGEventFlags.maskCommand
-        guard let keyUp = CGEvent(keyboardEventSource: src, virtualKey: vKeyCode, keyDown: false) else { return }
+        guard let keyUp = CGEvent(keyboardEventSource: src, virtualKey: vKeyCode, keyDown: false) else {
+            logger.error("Failed to create keyUp CGEvent for simulating paste")
+            return
+        }
         keyUp.flags = CGEventFlags.maskCommand
         
         keyDown.post(tap: CGEventTapLocation.cghidEventTap)
@@ -158,37 +168,35 @@ class ClipboardManager: ObservableObject {
     private func saveItems() {
         do {
             let data = try JSONEncoder().encode(items)
-            UserDefaults.standard.set(data, forKey: userDefaultsKey)
+            UserDefaults.standard.set(data, forKey: UserDefaultsKeys.clipboardHistory)
         } catch {
-            print("Failed to save clipboard items: \(error)")
+            logger.error("Failed to save clipboard items: \(error.localizedDescription)")
         }
     }
     
     private func loadItems() {
-        guard let data = UserDefaults.standard.data(forKey: userDefaultsKey) else { return }
+        guard let data = UserDefaults.standard.data(forKey: UserDefaultsKeys.clipboardHistory) else { return }
         do {
             self.items = try JSONDecoder().decode([ClipboardItem].self, from: data)
         } catch {
-            print("Failed to load clipboard items: \(error). Clearing corrupted history.")
+            logger.error("Failed to load clipboard items: \(error.localizedDescription). Clearing corrupted history.")
             clearHistory()
         }
     }
     
     func clearHistory() {
         self.items.removeAll()
-        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.clipboardHistory)
     }
     
     func updateMaxItems(_ count: Int) {
-        DispatchQueue.main.async {
-            self.maxItems = count
-            UserDefaults.standard.set(count, forKey: self.maxItemsKey)
-            
-            // 上限数を超えたら削除
-            if self.items.count > count {
-                self.items = Array(self.items.prefix(count))
-                self.saveItems()
-            }
+        self.maxItems = count
+        UserDefaults.standard.set(count, forKey: UserDefaultsKeys.maxItems)
+        
+        // 上限数を超えたら削除
+        if self.items.count > count {
+            self.items = Array(self.items.prefix(count))
+            self.saveItems()
         }
     }
 }

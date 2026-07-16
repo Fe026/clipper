@@ -7,7 +7,6 @@ struct ViewSizeKey: PreferenceKey {
     }
 }
 
-
 struct ContentView: View {
     @ObservedObject var clipboardManager: ClipboardManager
     @State private var searchText = ""
@@ -17,21 +16,32 @@ struct ContentView: View {
     var onClose: (() -> Void)? = nil
     var onSizeChanged: ((CGSize) -> Void)? = nil
     
-    var filteredItems: [ClipboardItem] {
+    // 検索語によるフィルタリング後のアイテム一覧（最大50件に制限）
+    private var filteredItems: [ClipboardItem] {
+        let items: [ClipboardItem]
         if searchText.isEmpty {
-            return clipboardManager.items
+            items = clipboardManager.items
         } else {
-            return clipboardManager.items.filter { $0.text.localizedCaseInsensitiveContains(searchText) }
+            items = clipboardManager.items.filter { $0.text.localizedCaseInsensitiveContains(searchText) }
         }
+        return Array(items.prefix(50))
+    }
+    
+    // 検索バーの下層にリストを潜り込ませるための、スクロールビュー上部余白の計算
+    private var listScrollInsetTop: CGFloat {
+        LayoutMetrics.searchBarAreaHeight - LayoutMetrics.searchBarTop
+    }
+    
+    // 画面の最大表示可能範囲に収めたリストの高さ（ScrollView表示時の上限）
+    private var listVisibleHeight: CGFloat {
+        LayoutMetrics.maxWindowHeight - LayoutMetrics.searchBarTop
     }
     
     var body: some View {
-        VStack(spacing: LayoutMetrics.mainVStackSpacing) {
-            
+        VStack(spacing: 0) {
             // 検索バーと履歴リストをZStackで重ねる (検索バーの下にリストが潜り込めるようにするため)
             ZStack(alignment: .top) {
-                
-                // 1. 履歴リスト (下層に配置)
+                // 1. 履歴リスト / 空白表示 (下層に配置)
                 if filteredItems.isEmpty {
                     emptyStateView
                 } else {
@@ -41,7 +51,6 @@ struct ContentView: View {
                 // 2. 検索バー (上層に配置)
                 searchBarView
             }
-            .padding(.bottom, LayoutMetrics.searchBarBottomPadding)
         }
         .frame(width: LayoutMetrics.windowWidth)
         // 1. まずVStack単体の自然な推奨サイズを測定する (これにより要素が少ないときにウィンドウが正しく縮みます)
@@ -57,7 +66,7 @@ struct ContentView: View {
         }
         // 2. その後に最大高さを制限し、コンテンツを常に「上詰め(.top)」に配置する
         .frame(maxHeight: LayoutMetrics.maxWindowHeight, alignment: .top)
-        .applyGlassEffect(in: .rect(cornerRadius: 14.0))
+        .applyGlassEffect(in: .rect(cornerRadius: 14.0), displayMode: .thick)
         .clipShape(.rect(cornerRadius: 14.0))
     }
 }
@@ -78,41 +87,67 @@ extension ContentView {
         .padding(.bottom, LayoutMetrics.emptyBottomPadding)
         .frame(maxWidth: .infinity)
     }
-    
     private var clipboardListView: some View {
-        let listContentHeight = CGFloat(filteredItems.count) * LayoutMetrics.rowHeight
-        let calculatedHeight = min(listContentHeight, LayoutMetrics.maxWindowHeight - (LayoutMetrics.searchBarAreaHeight + LayoutMetrics.searchBarBottomPadding))
-        
-        // スクロールビューが上端の上マージンに進入しないように、
-        // スクロールコンテンツ自身のパディングと、スクロールビュー自体の位置を既存の定数から計算
-        let scrollInsetTop = LayoutMetrics.searchBarAreaHeight - LayoutMetrics.searchBarTop
-        
-        return ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: LayoutMetrics.listSpacing) {
-                ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
-                    ClipboardRow(item: item, isHovered: hoveredItemId == item.id) {
-                        clipboardManager.selectAndPaste(item)
-                        onClose?()
-                    }
-                    .onHover { isHovered in
-                        withAnimation(.easeOut(duration: 0.1)) {
-                            hoveredItemId = isHovered ? item.id : nil
-                        }
-                    }
+        Group {
+            if filteredItems.count <= 10 {
+                // 10件以下の場合は、ScrollView を排除してスクロールやスクロールバーを物理的に排除する
+                VStack(spacing: 0) {
+                    Spacer()
+                        .frame(height: listScrollInsetTop + LayoutMetrics.scrollInsetTopOffset)
                     
-                    if index < filteredItems.count - 1 {
-                        Divider()
-                            .background(ColorTheme.divider)
-                            .padding(.horizontal, LayoutMetrics.dividerHorizontal)
+                    VStack(spacing: LayoutMetrics.listSpacing) {
+                        listViewContent
                     }
                 }
+                .padding(.bottom, LayoutMetrics.scrollBottomPadding)
+            } else {
+                // 10件を超える場合は、最大高さ制限付きの ScrollView で描画する
+                ScrollViewReader { proxy in
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 0) {
+                            Color.clear
+                                .frame(height: 0)
+                                .id("top")
+                            
+                            Spacer()
+                                .frame(height: listScrollInsetTop + LayoutMetrics.scrollInsetTopOffset)
+                            
+                            VStack(spacing: LayoutMetrics.listSpacing) {
+                                listViewContent
+                            }
+                        }
+                        .padding(.bottom, LayoutMetrics.scrollBottomPadding)
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ClipperPanelDidShow"))) { _ in
+                        proxy.scrollTo("top", anchor: .top)
+                    }
+                }
+                .frame(height: listVisibleHeight)
             }
-            .padding(.top, scrollInsetTop + LayoutMetrics.scrollInsetTopOffset)
-            .padding(.bottom, LayoutMetrics.scrollBottomPadding)
         }
         .padding(.horizontal, LayoutMetrics.windowHorizontal)
         .padding(.top, LayoutMetrics.searchBarTop) // スクロールビュー自体を検索バーの上端（上マージン）まで下げて配置
-        .frame(height: calculatedHeight + scrollInsetTop) // 高さ自体を引き上げて検索バーの下まで潜り込ませる
+    }
+    
+    @ViewBuilder
+    private var listViewContent: some View {
+        ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
+            ClipboardRow(item: item, isHovered: hoveredItemId == item.id) {
+                clipboardManager.selectAndPaste(item)
+                onClose?()
+            }
+            .onHover { isHovered in
+                withAnimation(.easeOut(duration: 0.1)) {
+                    hoveredItemId = isHovered ? item.id : nil
+                }
+            }
+            
+            if index < filteredItems.count - 1 {
+                Divider()
+                    .background(ColorTheme.divider)
+                    .padding(.horizontal, LayoutMetrics.dividerHorizontal)
+            }
+        }
     }
     
     private var searchBarView: some View {
@@ -135,7 +170,7 @@ extension ContentView {
         }
         .padding(.horizontal, LayoutMetrics.searchBarHorizontalPadding)
         .padding(.vertical, LayoutMetrics.searchBarVerticalPadding)
-        .applyGlassEffect(in: .rect(cornerRadius: LayoutMetrics.searchBarCornerRadius))
+        .applyGlassEffect(in: .rect(cornerRadius: LayoutMetrics.searchBarCornerRadius), displayMode: .thin)
         .padding(.horizontal, LayoutMetrics.windowHorizontal)
         .padding(.top, LayoutMetrics.searchBarTop)
     }

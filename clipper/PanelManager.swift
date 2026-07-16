@@ -19,21 +19,18 @@ class PanelManager {
     private func updatePanelSize(_ size: CGSize) {
         guard let panel = panel else { return }
         
-        // レイアウト実行サイクルから独立させ、メインスレッドで安全にサイズ変更を反映する
-        DispatchQueue.main.async {
-            var frame = panel.frame
-            let oldHeight = frame.size.height
-            let newHeight = size.height
+        var frame = panel.frame
+        let oldHeight = frame.size.height
+        let newHeight = size.height
+        
+        if abs(oldHeight - newHeight) > 0.5 {
+            let diff = newHeight - oldHeight
+            // macOSは左下が原点のため、ウィンドウの上端が変わらないようにY座標を調整
+            frame.origin.y -= diff
+            frame.size.height = newHeight
+            frame.size.width = size.width
             
-            if abs(oldHeight - newHeight) > 0.5 {
-                let diff = newHeight - oldHeight
-                // macOSは左下が原点のため、ウィンドウの上端が変わらないようにY座標を調整
-                frame.origin.y -= diff
-                frame.size.height = newHeight
-                frame.size.width = size.width
-                
-                panel.setFrame(frame, display: true, animate: false)
-            }
+            panel.setFrame(frame, display: true, animate: false)
         }
     }
     
@@ -89,6 +86,8 @@ class PanelManager {
         // アプリケーションをアクティブにしてウィンドウを最前面にし、キーフォーカスを当てる
         NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
+        
+        NotificationCenter.default.post(name: NSNotification.Name("ClipperPanelDidShow"), object: nil)
     }
     
     func closePanel() {

@@ -39,11 +39,11 @@ struct LayoutMetrics {
     static let dividerHorizontal: CGFloat = 0      // テキスト開始位置と揃える余白
     
     // 空表示 (Empty View)
-    static let emptyViewSpacing: CGFloat = 8       // 空表示要素のスペース
+    static let emptyViewSpacing: CGFloat = 6       // 空表示要素のスペース
     static let emptyIconSize: CGFloat = 24         // 空表示のアイコンサイズ
     static let emptyFontSize: CGFloat = 12         // 空表示のテキストフォントサイズ
-    static let emptyTopOffset: CGFloat = 20        // 空表示の上部オフセット
-    static let emptyBottomPadding: CGFloat = 20    // 空表示の下部パディング
+    static let emptyTopOffset: CGFloat = 20         // 空表示の上部オフセット
+    static let emptyBottomPadding: CGFloat = 24    // 空表示の下部パディング
     
     // フッターの配置 (将来用)
     static let footerHorizontal: CGFloat = 8       // フッターの左右余白 (検索バー/リストと揃えるため8)
@@ -74,16 +74,46 @@ struct ColorTheme {
     static let rowHoverBg = Color.primary.opacity(0.08)
     static let badgeSourceApp = Color.blue.opacity(0.8)
     static let badgeTime = Color.secondary
+    
+    // 設定画面 (SettingsView)
+    static func settingsSidebarActiveBg(isDark: Bool) -> Color {
+        isDark ? Color.white.opacity(0.10) : Color.black.opacity(0.06)
+    }
+    
+    static func settingsSidebarActiveBorder(isDark: Bool) -> Color {
+        isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.04)
+    }
+    
+    static func settingsSidebarActiveShadow(isDark: Bool) -> Color {
+        Color.black.opacity(isDark ? 0.25 : 0.1)
+    }
+    
+    static func settingsSidebarHoverBg(isDark: Bool) -> Color {
+        isDark ? Color.white.opacity(0.04) : Color.black.opacity(0.02)
+    }
+}
+
+enum GlassEffectDisplayMode {
+    case always
+    case thin
+    case thick
 }
 
 extension View {
     @ViewBuilder
-    func applyGlassEffect(in shape: some Shape) -> some View {
-        #if compiler(>=6.3)
-        self.glassEffect(in: shape)
-        #else
-        self.background(.ultraThinMaterial, in: shape)
-        #endif
+    func applyGlassEffect(in shape: some Shape, displayMode: GlassEffectDisplayMode = .always) -> some View {
+        switch displayMode {
+        case .thick:
+            #if compiler(>=6.0)
+            self.glassEffect(in: shape)
+            #else
+            self.background(.thickMaterial, in: shape)
+            #endif
+        case .thin:
+            self.background(.thinMaterial, in: shape)
+        case .always:
+            self.background(.ultraThinMaterial, in: shape)
+        }
     }
 }
 
