@@ -104,7 +104,7 @@ extension View {
     func applyGlassEffect(in shape: some Shape, displayMode: GlassEffectDisplayMode = .always) -> some View {
         switch displayMode {
         case .thick:
-            #if compiler(>=6.0)
+            #if compiler(>=6.1)
             self.glassEffect(in: shape)
             #else
             self.background(.thickMaterial, in: shape)
