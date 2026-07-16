@@ -102,7 +102,7 @@ enum GlassEffectDisplayMode {
 extension View {
     @ViewBuilder
     func applyGlassEffect(in shape: some Shape, displayMode: GlassEffectDisplayMode = .always) -> some View {
-        #if canImport(SwiftUI, _version: 26.0)
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             self.glassEffect(in: shape)
         } else {
