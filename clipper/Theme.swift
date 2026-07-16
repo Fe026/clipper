@@ -102,22 +102,29 @@ enum GlassEffectDisplayMode {
 extension View {
     @ViewBuilder
     func applyGlassEffect(in shape: some Shape, displayMode: GlassEffectDisplayMode = .always) -> some View {
+        #if canImport(SwiftUI, _version: 26.0)
+        if #available(macOS 26.0, *) {
+            self.glassEffect(in: shape)
+        } else {
+            switch displayMode {
+            case .thick:
+                self.background(.thickMaterial, in: shape)
+            case .thin:
+                self.background(.thinMaterial, in: shape)
+            case .always:
+                self.background(.ultraThinMaterial, in: shape)
+            }
+        }
+        #else
         switch displayMode {
         case .thick:
-            #if canImport(SwiftUI, _version: 26.0)
-            if #available(macOS 26.0, *) {
-                self.glassEffect(in: shape)
-            } else {
-                self.background(.thickMaterial, in: shape)
-            }
-            #else
             self.background(.thickMaterial, in: shape)
-            #endif
         case .thin:
             self.background(.thinMaterial, in: shape)
         case .always:
             self.background(.ultraThinMaterial, in: shape)
         }
+        #endif
     }
 }
 
