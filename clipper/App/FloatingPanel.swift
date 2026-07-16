@@ -2,7 +2,9 @@ import Cocoa
 import SwiftUI
 
 class FloatingPanel: NSPanel {
-    init(contentView: AnyView) {
+    var onClose: (() -> Void)?
+    
+    init<Content: View>(contentView: Content) {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 360, height: 100),
             styleMask: [.nonactivatingPanel, .fullSizeContentView],
@@ -41,11 +43,19 @@ class FloatingPanel: NSPanel {
     // ユーザーがウィンドウ外をクリックしたり、他のアプリにフォーカスが移った際に自動で閉じる
     override func resignKey() {
         super.resignKey()
-        self.orderOut(nil)
+        if let onClose = onClose {
+            onClose()
+        } else {
+            self.orderOut(nil)
+        }
     }
     
     // Escapeキーが押されたときにウィンドウを閉じる
     override func cancelOperation(_ sender: Any?) {
-        self.orderOut(nil)
+        if let onClose = onClose {
+            onClose()
+        } else {
+            self.orderOut(nil)
+        }
     }
 }

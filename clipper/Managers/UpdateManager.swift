@@ -11,19 +11,17 @@ enum UpdateState: Equatable {
 }
 
 @MainActor
-class UpdateManager: ObservableObject {
+class UpdateManager: ObservableObject, UpdateManaging {
     @Published var state: UpdateState = .idle
     
     var currentVersion: String {
-        return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        return AppVersionProvider.currentVersion
     }
-    
-    private let repoUrl = "https://api.github.com/repos/Fe026/clipper/releases/latest"
     
     func checkForUpdates() {
         state = .checking
         
-        guard let url = URL(string: repoUrl) else {
+        guard let url = AppConstants.URLs.gitHubReleasesAPI else {
             state = .error("無効なリポジトリURLです。")
             return
         }
@@ -33,28 +31,30 @@ class UpdateManager: ObservableObject {
         // User-Agent は GitHub API のリクエストに必須です
         request.setValue("clipper-app", forHTTPHeaderField: "User-Agent")
         
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
+        Task {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
                 
-                if let error = error {
-                    self.state = .error("通信エラー: \(error.localizedDescription)")
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    self.state = .error("無効なレスポンスを受信しました。")
                     return
                 }
                 
-                guard let data = data else {
-                    self.state = .error("データを受信できませんでした。")
+                guard httpResponse.statusCode == 200 else {
+                    if httpResponse.statusCode == 403 {
+                        self.state = .error("APIの利用制限に達しました。時間をおいて再試行してください。")
+                    } else {
+                        self.state = .error("サーバーエラー（ステータスコード: \(httpResponse.statusCode)）")
+                    }
                     return
                 }
                 
-                do {
-                    let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
-                    self.processRelease(release)
-                } catch {
-                    self.state = .error("レスポンスの解析に失敗しました。")
-                }
+                let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+                self.processRelease(release)
+            } catch {
+                self.state = .error("通信エラー: \(error.localizedDescription)")
             }
-        }.resume()
+        }
     }
     
     private func processRelease(_ release: GitHubRelease) {
@@ -71,8 +71,8 @@ class UpdateManager: ObservableObject {
             cleanCurrentVersion.removeFirst()
         }
         
-        // バージョン比較: numeric オプションを使用し、タグの方が新しければアップデートありと判定
-        if cleanTagName.compare(cleanCurrentVersion, options: .numeric) == .orderedDescending {
+        // バージョン比較: セマンティックバージョニングに基づく比較
+        if isNewerVersion(latest: cleanTagName, current: cleanCurrentVersion) {
             if let url = URL(string: release.htmlUrl) {
                 self.state = .updateAvailable(latestVersion: rawTagName, releaseUrl: url)
             } else {
@@ -81,6 +81,24 @@ class UpdateManager: ObservableObject {
         } else {
             self.state = .noUpdate(latestVersion: rawTagName)
         }
+    }
+    
+    func isNewerVersion(latest: String, current: String) -> Bool {
+        let latestComponents = latest.split(separator: ".").compactMap { Int($0) }
+        let currentComponents = current.split(separator: ".").compactMap { Int($0) }
+        
+        let count = max(latestComponents.count, currentComponents.count)
+        for i in 0..<count {
+            let latestVal = i < latestComponents.count ? latestComponents[i] : 0
+            let currentVal = i < currentComponents.count ? currentComponents[i] : 0
+            
+            if latestVal > currentVal {
+                return true
+            } else if latestVal < currentVal {
+                return false
+            }
+        }
+        return false
     }
     
     func openReleaseUrl(_ url: URL) {

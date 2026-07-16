@@ -5,10 +5,14 @@ struct ClipboardRow: View {
     let isHovered: Bool
     let action: () -> Void
     
-    var timeString: String {
+    private static let formatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: item.timestamp, relativeTo: Date())
+        return formatter
+    }()
+    
+    var timeString: String {
+        return Self.formatter.localizedString(for: item.timestamp, relativeTo: Date())
     }
     
     var displaySingleLineText: String {

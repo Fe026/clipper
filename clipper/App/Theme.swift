@@ -1,12 +1,11 @@
 import SwiftUI
 
 // UI レイアウト定数 (パディングとマージンの一元管理)
-struct LayoutMetrics {
+enum LayoutMetrics {
     // ウィンドウ全体・配置
     static let windowWidth: CGFloat = 280         // ウィンドウ幅
     static let maxWindowHeight: CGFloat = 480     // ウィンドウ最大高さ
     static let windowHorizontal: CGFloat = 8      // ウィンドウ左右の基本マージン (検索バー、ScrollViewの左右配置)
-    static let mainVStackSpacing: CGFloat = 12    // メインVStackのスペース
     
     // 検索バー
     static let searchBarTop: CGFloat = 8          // 検索バーの上方向余白
@@ -44,14 +43,10 @@ struct LayoutMetrics {
     static let emptyFontSize: CGFloat = 12         // 空表示のテキストフォントサイズ
     static let emptyTopOffset: CGFloat = 20         // 空表示の上部オフセット
     static let emptyBottomPadding: CGFloat = 24    // 空表示の下部パディング
-    
-    // フッターの配置 (将来用)
-    static let footerHorizontal: CGFloat = 8       // フッターの左右余白 (検索バー/リストと揃えるため8)
-    static let footerBottom: CGFloat = 8           // フッターの下マージン
 }
 
 // SwiftUIの色定数 (色・グラデーションの一元管理)
-struct ColorTheme {
+enum ColorTheme {
     // 基本テキスト・アイコン
     static let primaryText = Color.primary
     static let secondaryText = Color.secondary
@@ -75,22 +70,36 @@ struct ColorTheme {
     static let badgeSourceApp = Color.blue.opacity(0.8)
     static let badgeTime = Color.secondary
     
-    // 設定画面 (SettingsView)
-    static func settingsSidebarActiveBg(isDark: Bool) -> Color {
-        isDark ? Color.white.opacity(0.10) : Color.black.opacity(0.06)
-    }
+    // 設定画面 (SettingsView) の動的カラー (システム外観に応じて自動切り替え)
+    static let settingsSidebarActiveBg = Color(NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor.white.withAlphaComponent(0.10)
+            : NSColor.black.withAlphaComponent(0.06)
+    })
     
-    static func settingsSidebarActiveBorder(isDark: Bool) -> Color {
-        isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.04)
-    }
+    static let settingsSidebarActiveBorder = Color(NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor.white.withAlphaComponent(0.08)
+            : NSColor.black.withAlphaComponent(0.04)
+    })
     
-    static func settingsSidebarActiveShadow(isDark: Bool) -> Color {
-        Color.black.opacity(isDark ? 0.25 : 0.1)
-    }
+    static let settingsSidebarActiveShadow = Color(NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor.black.withAlphaComponent(0.25)
+            : NSColor.black.withAlphaComponent(0.10)
+    })
     
-    static func settingsSidebarHoverBg(isDark: Bool) -> Color {
-        isDark ? Color.white.opacity(0.04) : Color.black.opacity(0.02)
-    }
+    static let settingsSidebarHoverBg = Color(NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor.white.withAlphaComponent(0.04)
+            : NSColor.black.withAlphaComponent(0.02)
+    })
+    
+    static let settingsSidebarBg = Color(NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor.black.withAlphaComponent(0.15)
+            : NSColor.black.withAlphaComponent(0.03)
+    })
 }
 
 enum GlassEffectDisplayMode {
@@ -127,4 +136,3 @@ extension View {
         #endif
     }
 }
-

@@ -21,9 +21,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var settingsWindow: NSWindow?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 起動時にショートカット記録状態を確実にリセット
-        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.isRecordingShortcut)
-        
         // Dockアイコンを完全に非表示にする
         NSApp.setActivationPolicy(.accessory)
         
@@ -55,47 +52,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
     
-
     @objc private func statusItemClicked() {
         if let event = NSApp.currentEvent, event.type == .rightMouseUp {
-            let menu = NSMenu()
-            
-            let clearItem = NSMenuItem(title: "履歴をクリア", action: #selector(clearHistoryClicked), keyEquivalent: "")
-            clearItem.target = self
-            menu.addItem(clearItem)
-            
-            let limitMenu = NSMenu()
-            let limits = [50, 100, 500, 1000, 2000]
-            for limit in limits {
-                let item = NSMenuItem(title: "\(limit)件", action: #selector(limitClicked(_:)), keyEquivalent: "")
-                item.target = self
-                item.representedObject = limit
-                if clipboardManager.maxItems == limit {
-                    item.state = .on
-                }
-                limitMenu.addItem(item)
-            }
-            let limitSubMenu = NSMenuItem(title: "保存件数制限", action: nil, keyEquivalent: "")
-            limitSubMenu.submenu = limitMenu
-            menu.addItem(limitSubMenu)
-            
-            menu.addItem(NSMenuItem.separator())
-            
-            let settingsItem = NSMenuItem(title: "設定...", action: #selector(openSettings), keyEquivalent: ",")
-            settingsItem.target = self
-            menu.addItem(settingsItem)
-            
-            menu.addItem(NSMenuItem.separator())
-            
-            let quitItem = NSMenuItem(title: "終了", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-            menu.addItem(quitItem)
-            
+            let menu = buildStatusMenu()
             if let button = statusItem?.button {
                 menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
             }
         } else {
             panelManager.togglePanel()
         }
+    }
+    
+    private func buildStatusMenu() -> NSMenu {
+        return StatusMenuBuilder.build(
+            delegate: self,
+            maxItems: clipboardManager.maxItems,
+            clearAction: #selector(clearHistoryClicked),
+            limitAction: #selector(limitClicked(_:)),
+            settingsAction: #selector(openSettings)
+        )
     }
     
     @objc private func clearHistoryClicked() {
@@ -136,12 +111,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.positionWindowButtons(for: window)
         }
         
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
     
     private func positionWindowButtons(for window: NSWindow) {
         guard let closeButton = window.standardWindowButton(.closeButton) else { return }
+        // 注意: タイトルバーコンテナのトラバーサル（superview?.superview）は
+        // AppKit の非公開階層に依存しており、macOS の将来のバージョンで構造が変化する可能性があります。
         if let titlebarContainer = closeButton.superview?.superview {
             var frame = titlebarContainer.frame
             frame.origin.x = 8
@@ -164,9 +141,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     
     func windowWillClose(_ notification: Notification) {
         if let window = notification.object as? NSWindow, window == settingsWindow {
-            UserDefaults.standard.set(false, forKey: UserDefaultsKeys.isRecordingShortcut)
             settingsWindow = nil
         }
     }
 }
-

@@ -4,8 +4,7 @@ struct UpdateSettingsView: View {
     @StateObject private var updateManager = UpdateManager()
     
     private var currentVersionFormatted: String {
-        let version = updateManager.currentVersion
-        return version.lowercased().hasPrefix("v") ? version : "v\(version)"
+        return AppVersionProvider.currentVersionFormatted
     }
     
     private func formatVersion(_ version: String) -> String {
@@ -38,7 +37,6 @@ struct UpdateSettingsView: View {
                     }) {
                         Label("アップデートを確認", systemImage: "arrow.clockwise")
                     }
-                    .buttonStyle(.borderedProminent)
                     .disabled(updateManager.state == .checking)
                     
                     switch updateManager.state {
@@ -99,10 +97,9 @@ struct UpdateSettingsView: View {
                 Button(action: {
                     updateManager.openReleaseUrl(url)
                 }) {
-                    Label("アップデートをダウンロード (ブラウザが開きます)", systemImage: "square.and.arrow.down")
+                    Label("アップデートをダウンロード", systemImage: "square.and.arrow.down")
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.blue)
             }
             .padding(.top, 4)
             

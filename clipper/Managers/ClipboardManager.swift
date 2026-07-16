@@ -1,10 +1,10 @@
 import Foundation
 import AppKit
-import Combine
 import OSLog
+import Combine
 
 @MainActor
-class ClipboardManager: ObservableObject {
+class ClipboardManager: ObservableObject, ClipboardManaging {
     @Published var items: [ClipboardItem] = []
     
     private let pasteboard = NSPasteboard.general
@@ -13,8 +13,6 @@ class ClipboardManager: ObservableObject {
     private var isMonitoring = true
     
     @Published var maxItems: Int
-    private let vKeyCode: CGKeyCode = 0x09 // 'v' key code
-    private let pasteSimulationDelay: TimeInterval = 0.1
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "clipper", category: "ClipboardManager")
     
     init() {
@@ -31,7 +29,7 @@ class ClipboardManager: ObservableObject {
         monitorTask = Task(priority: .utility) { [weak self] in
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(nanoseconds: 500_000_000) // 0.5秒
+                    try await Task.sleep(nanoseconds: UInt64(AppConstants.Clipboard.pollingInterval * 1_000_000_000))
                 } catch {
                     break
                 }
@@ -79,7 +77,7 @@ class ClipboardManager: ObservableObject {
                 sourceAppName = activeApp.localizedName
             }
             
-            let newItem = ClipboardItem(text: text, type: .text, rawData: rtfData, htmlData: htmlData, sourceApp: sourceAppName)
+            let newItem = ClipboardItem(text: text, type: .text, rtfData: rtfData, htmlData: htmlData, sourceApp: sourceAppName)
             addItem(newItem)
         }
     }
@@ -101,27 +99,9 @@ class ClipboardManager: ObservableObject {
     func selectAndPaste(_ item: ClipboardItem) {
         // 一時的に監視を停止して、自分自身が上書きしたものをコピーとして検知しないようにする
         isMonitoring = false
-        
-        pasteboard.clearContents()
-        
-        // NSPasteboardItem を使用して、複数形式のデータをアトミックかつ優先度付きで書き込む（推奨API）
-        let pbItem = NSPasteboardItem()
-        
-        if let rtfData = item.rawData {
-            pbItem.setData(rtfData, forType: .rtf)
+        defer {
+            isMonitoring = true
         }
-        if let htmlData = item.htmlData {
-            pbItem.setData(htmlData, forType: .html)
-        }
-        pbItem.setString(item.text, forType: .string)
-        
-        pasteboard.writeObjects([pbItem])
-        
-        // changeCountを更新して、自分の書き込みを検知対象外にする
-        self.changeCount = pasteboard.changeCount
-        
-        // 監視を再開
-        isMonitoring = true
         
         // タイムスタンプを現在の時刻に更新し、リストの先頭に移動する
         let updatedItem = ClipboardItem(
@@ -129,63 +109,104 @@ class ClipboardManager: ObservableObject {
             text: item.text,
             type: item.type,
             timestamp: Date(),
-            rawData: item.rawData,
+            rtfData: item.rtfData,
             htmlData: item.htmlData,
             sourceApp: item.sourceApp
         )
         
+        // クリップボード書き込みとペーストの実行は PasteService に委譲する
+        PasteService.shared.paste(item: updatedItem)
+        
+        // changeCountを更新して、自分の書き込みを検知対象外にする
+        self.changeCount = pasteboard.changeCount
+        
         self.items.removeAll { $0.id == item.id || $0.text == item.text }
         self.items.insert(updatedItem, at: 0)
         self.saveItems()
-        
-        // システムイベントでCommand+Vを入力し貼り付けを実行
-        DispatchQueue.main.asyncAfter(deadline: .now() + pasteSimulationDelay) {
-            self.simulatePaste()
-        }
-    }
-    
-    private func simulatePaste() {
-        guard let src = CGEventSource(stateID: .hidSystemState) else {
-            logger.error("Failed to create CGEventSource for simulating paste")
-            return
-        }
-        guard let keyDown = CGEvent(keyboardEventSource: src, virtualKey: vKeyCode, keyDown: true) else {
-            logger.error("Failed to create keyDown CGEvent for simulating paste")
-            return
-        }
-        keyDown.flags = CGEventFlags.maskCommand
-        guard let keyUp = CGEvent(keyboardEventSource: src, virtualKey: vKeyCode, keyDown: false) else {
-            logger.error("Failed to create keyUp CGEvent for simulating paste")
-            return
-        }
-        keyUp.flags = CGEventFlags.maskCommand
-        
-        keyDown.post(tap: CGEventTapLocation.cghidEventTap)
-        keyUp.post(tap: CGEventTapLocation.cghidEventTap)
     }
     
     // 永続化関連
-    private func saveItems() {
+    private var historyFileURL: URL? {
+        guard let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let clipperURL = appSupportURL.appendingPathComponent("clipper", isDirectory: true)
+        
         do {
-            let data = try JSONEncoder().encode(items)
-            UserDefaults.standard.set(data, forKey: UserDefaultsKeys.clipboardHistory)
+            try FileManager.default.createDirectory(at: clipperURL, withIntermediateDirectories: true, attributes: nil)
         } catch {
-            logger.error("Failed to save clipboard items: \(error.localizedDescription)")
+            logger.error("Failed to create Application Support/clipper directory: \(error.localizedDescription)")
+            return nil
+        }
+        
+        return clipperURL.appendingPathComponent("history.json")
+    }
+    
+    private var saveTask: Task<Void, Never>?
+    
+    private func saveItems() {
+        saveTask?.cancel()
+        
+        saveTask = Task(priority: .background) {
+            do {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+                
+                guard !Task.isCancelled else { return }
+                
+                let itemsToSave = await MainActor.run { self.items }
+                let data = try JSONEncoder().encode(itemsToSave)
+                
+                guard let fileURL = self.historyFileURL else { return }
+                try data.write(to: fileURL, options: [.atomic])
+                self.logger.info("Successfully saved \(itemsToSave.count) items to JSON file.")
+            } catch is CancellationError {
+                // Ignore cancellation
+            } catch {
+                self.logger.error("Failed to save clipboard items: \(error.localizedDescription)")
+            }
         }
     }
     
     private func loadItems() {
-        guard let data = UserDefaults.standard.data(forKey: UserDefaultsKeys.clipboardHistory) else { return }
-        do {
-            self.items = try JSONDecoder().decode([ClipboardItem].self, from: data)
-        } catch {
-            logger.error("Failed to load clipboard items: \(error.localizedDescription). Clearing corrupted history.")
-            clearHistory()
+        if let fileURL = historyFileURL, FileManager.default.fileExists(atPath: fileURL.path) {
+            do {
+                let data = try Data(contentsOf: fileURL)
+                self.items = try JSONDecoder().decode([ClipboardItem].self, from: data)
+                logger.info("Loaded \(self.items.count) items from JSON file.")
+                return
+            } catch {
+                logger.error("Failed to load clipboard items from JSON file: \(error.localizedDescription)")
+            }
+        }
+        
+        if let oldData = UserDefaults.standard.data(forKey: UserDefaultsKeys.clipboardHistory) {
+            do {
+                self.items = try JSONDecoder().decode([ClipboardItem].self, from: oldData)
+                logger.info("Successfully migrated \(self.items.count) items from UserDefaults.")
+                
+                saveItems()
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.clipboardHistory)
+                return
+            } catch {
+                logger.error("Failed to migrate items from UserDefaults: \(error.localizedDescription)")
+            }
         }
     }
     
     func clearHistory() {
         self.items.removeAll()
+        saveTask?.cancel()
+        
+        if let fileURL = historyFileURL {
+            do {
+                let data = try JSONEncoder().encode([ClipboardItem]())
+                try data.write(to: fileURL, options: [.atomic])
+                logger.info("Successfully cleared history and saved empty state.")
+            } catch {
+                logger.error("Failed to clear history file: \(error.localizedDescription)")
+            }
+        }
+        
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.clipboardHistory)
     }
     

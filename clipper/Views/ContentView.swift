@@ -7,8 +7,8 @@ struct ViewSizeKey: PreferenceKey {
     }
 }
 
-struct ContentView: View {
-    @ObservedObject var clipboardManager: ClipboardManager
+struct ContentView<Manager: ClipboardManaging & ObservableObject>: View {
+    @ObservedObject var clipboardManager: Manager
     @State private var searchText = ""
     @State private var hoveredItemId: UUID? = nil
     
@@ -24,7 +24,7 @@ struct ContentView: View {
         } else {
             items = clipboardManager.items.filter { $0.text.localizedCaseInsensitiveContains(searchText) }
         }
-        return Array(items.prefix(50))
+        return Array(items.prefix(AppConstants.Clipboard.maxFilteredItems))
     }
     
     // 検索バーの下層にリストを潜り込ませるための、スクロールビュー上部余白の計算
@@ -118,7 +118,7 @@ extension ContentView {
                         }
                         .padding(.bottom, LayoutMetrics.scrollBottomPadding)
                     }
-                    .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ClipperPanelDidShow"))) { _ in
+                    .onReceive(NotificationCenter.default.publisher(for: .clipperPanelDidShow)) { _ in
                         proxy.scrollTo("top", anchor: .top)
                     }
                 }

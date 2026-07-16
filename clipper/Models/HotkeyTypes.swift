@@ -67,36 +67,38 @@ enum ShortcutKeyOption: String, CaseIterable, Identifiable {
     
     var id: String { self.rawValue }
     
+    private static let keyMap: [ShortcutKeyOption: (keyCode: UInt16, char: UInt32)] = [
+        .a: (0x00, 0x41),
+        .s: (0x01, 0x53),
+        .d: (0x02, 0x44),
+        .f: (0x03, 0x46),
+        .h: (0x04, 0x48),
+        .g: (0x05, 0x47),
+        .z: (0x06, 0x5A),
+        .x: (0x07, 0x58),
+        .c: (0x08, 0x43),
+        .v: (0x09, 0x56),
+        .b: (0x0B, 0x42),
+        .q: (0x0C, 0x51),
+        .w: (0x0D, 0x57),
+        .e: (0x0E, 0x45),
+        .r: (0x0F, 0x52),
+        .y: (0x10, 0x59),
+        .t: (0x11, 0x54),
+        .o: (0x1F, 0x4F),
+        .u: (0x20, 0x55),
+        .i: (0x22, 0x49),
+        .p: (0x23, 0x50),
+        .l: (0x25, 0x4C),
+        .j: (0x26, 0x4A),
+        .k: (0x28, 0x4B),
+        .n: (0x2D, 0x4E),
+        .m: (0x2E, 0x4D),
+        .space: (0x31, 0x20)
+    ]
+    
     var keyCode: UInt16 {
-        switch self {
-        case .a: return 0x00
-        case .s: return 0x01
-        case .d: return 0x02
-        case .f: return 0x03
-        case .h: return 0x04
-        case .g: return 0x05
-        case .z: return 0x06
-        case .x: return 0x07
-        case .c: return 0x08
-        case .v: return 0x09
-        case .b: return 0x0B
-        case .q: return 0x0C
-        case .w: return 0x0D
-        case .e: return 0x0E
-        case .r: return 0x0F
-        case .y: return 0x10
-        case .t: return 0x11
-        case .o: return 0x1F
-        case .u: return 0x20
-        case .i: return 0x22
-        case .p: return 0x23
-        case .l: return 0x25
-        case .j: return 0x26
-        case .k: return 0x28
-        case .n: return 0x2D
-        case .m: return 0x2E
-        case .space: return 0x31
-        }
+        return Self.keyMap[self]?.keyCode ?? 0
     }
     
     static func keyString(from keyCode: UInt16) -> String {
@@ -120,46 +122,6 @@ enum ShortcutKeyOption: String, CaseIterable, Identifiable {
     }
     
     static func eventCharacters(from keyCode: UInt16) -> UInt32? {
-        switch keyCode {
-        case 0: return 0x41 // A
-        case 1: return 0x53 // S
-        case 2: return 0x44 // D
-        case 3: return 0x46 // F
-        case 4: return 0x48 // H
-        case 5: return 0x47 // G
-        case 6: return 0x5A // Z
-        case 7: return 0x58 // X
-        case 8: return 0x43 // C
-        case 9: return 0x56 // V
-        case 11: return 0x42 // B
-        case 12: return 0x51 // Q
-        case 13: return 0x57 // W
-        case 14: return 0x45 // E
-        case 15: return 0x52 // R
-        case 16: return 0x59 // Y
-        case 17: return 0x54 // T
-        case 18: return 0x31 // 1
-        case 19: return 0x32 // 2
-        case 20: return 0x33 // 3
-        case 21: return 0x34 // 4
-        case 22: return 0x36 // 6
-        case 23: return 0x35 // 5
-        case 24: return 0x3D // =
-        case 25: return 0x39 // 9
-        case 26: return 0x37 // 7
-        case 27: return 0x2D // -
-        case 28: return 0x38 // 8
-        case 29: return 0x30 // 0
-        case 31: return 0x4F // O
-        case 32: return 0x55 // U
-        case 34: return 0x49 // I
-        case 35: return 0x50 // P
-        case 37: return 0x4C // L
-        case 38: return 0x4A // J
-        case 40: return 0x4B // K
-        case 45: return 0x4E // N
-        case 46: return 0x4D // M
-        default: return nil
-        }
+        return keyMap.values.first(where: { $0.keyCode == keyCode })?.char
     }
 }

@@ -3,7 +3,6 @@ import SwiftUI
 struct SidebarView: View {
     @Binding var activeTab: SettingsTab
     @Binding var hoveredTab: SettingsTab?
-    let colorScheme: ColorScheme
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -18,7 +17,7 @@ struct SidebarView: View {
             
             if let aboutTab = SettingsTab.allCases.first(where: { $0 == .about }) {
                 Divider()
-                    .background(colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.1))
+                    .background(Color.primary.opacity(0.1))
                     .padding(.horizontal, 4)
                     .padding(.vertical, 2)
                 tabButton(for: aboutTab)
@@ -53,18 +52,17 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .background(
             Group {
-                let isDark = colorScheme == .dark
                 if activeTab == tab {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(ColorTheme.settingsSidebarActiveBg(isDark: isDark))
+                        .fill(ColorTheme.settingsSidebarActiveBg)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(ColorTheme.settingsSidebarActiveBorder(isDark: isDark), lineWidth: 0.5)
+                                .stroke(ColorTheme.settingsSidebarActiveBorder, lineWidth: 0.5)
                         )
-                        .shadow(color: ColorTheme.settingsSidebarActiveShadow(isDark: isDark), radius: 3, x: 0, y: 1.5)
+                        .shadow(color: ColorTheme.settingsSidebarActiveShadow, radius: 3, x: 0, y: 1.5)
                 } else if hoveredTab == tab {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(ColorTheme.settingsSidebarHoverBg(isDark: isDark))
+                        .fill(ColorTheme.settingsSidebarHoverBg)
                 } else {
                     Color.clear
                 }

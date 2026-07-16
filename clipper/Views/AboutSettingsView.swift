@@ -42,13 +42,15 @@ struct AboutSettingsView: View {
                     Text("リポジトリ:")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
-                    Link(destination: URL(string: "https://github.com/Fe026/clipper")!) {
-                        Text("Fe026/clipper")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.blue)
-                            .underline()
+                    if let url = AppConstants.URLs.gitHubRepo {
+                        Link(destination: url) {
+                            Text("Fe026/clipper")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.blue)
+                                .underline()
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 
                 // バージョン
@@ -56,7 +58,7 @@ struct AboutSettingsView: View {
                     Text("バージョン:")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
-                    Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
+                    Text(AppVersionProvider.currentVersion)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.primary)
                 }

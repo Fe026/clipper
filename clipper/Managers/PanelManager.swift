@@ -2,16 +2,20 @@ import AppKit
 import SwiftUI
 
 @MainActor
-class PanelManager {
+class PanelManager: PanelManaging {
     var panel: FloatingPanel?
     
-    func setupPanel(clipboardManager: ClipboardManager) {
+    func setupPanel<Manager: ClipboardManaging & ObservableObject>(clipboardManager: Manager) {
         let contentView = ContentView(clipboardManager: clipboardManager) { [weak self] in
             self?.closePanel()
         } onSizeChanged: { [weak self] newSize in
             self?.updatePanelSize(newSize)
         }
-        panel = FloatingPanel(contentView: AnyView(contentView))
+        let floatingPanel = FloatingPanel(contentView: contentView)
+        floatingPanel.onClose = { [weak self] in
+            self?.closePanel()
+        }
+        panel = floatingPanel
     }
     
     private var previousActiveApp: NSRunningApplication?
@@ -60,25 +64,24 @@ class PanelManager {
         var originY = mouseLocation.y - panelSize.height
         
         // パネルが画面外にはみ出さないように現在のスクリーン基準で位置調整
-        if let screen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) ?? NSScreen.main {
-            let screenFrame = screen.visibleFrame
-            
-            // Y方向調整
-            if originY < screenFrame.minY {
-                // 下端はみ出し（下につく場合）：画面の下に合わせる
-                originY = screenFrame.minY
-            } else if originY + panelSize.height > screenFrame.maxY {
-                // 上端はみ出し
-                originY = screenFrame.maxY - panelSize.height
-            }
-            
-            // X方向調整：通常はマウスの右側、右端はみ出しなら左側、それでも左端はみ出しなら左端に合わせる
-            if originX + panelSize.width > screenFrame.maxX {
-                originX = mouseLocation.x - panelSize.width
-            }
-            if originX < screenFrame.minX {
-                originX = screenFrame.minX
-            }
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) ?? NSScreen.main else { return }
+        let screenFrame = screen.visibleFrame
+        
+        // Y方向調整
+        if originY < screenFrame.minY {
+            // 下端はみ出し（下につく場合）：画面の下に合わせる
+            originY = screenFrame.minY
+        } else if originY + panelSize.height > screenFrame.maxY {
+            // 上端はみ出し
+            originY = screenFrame.maxY - panelSize.height
+        }
+        
+        // X方向調整：通常はマウスの右側、右端はみ出しなら左側、それでも左端はみ出しなら左端に合わせる
+        if originX + panelSize.width > screenFrame.maxX {
+            originX = mouseLocation.x - panelSize.width
+        }
+        if originX < screenFrame.minX {
+            originX = screenFrame.minX
         }
         
         panel.setFrameOrigin(NSPoint(x: originX, y: originY))
@@ -87,7 +90,7 @@ class PanelManager {
         NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
         
-        NotificationCenter.default.post(name: NSNotification.Name("ClipperPanelDidShow"), object: nil)
+        NotificationCenter.default.post(name: .clipperPanelDidShow, object: nil)
     }
     
     func closePanel() {

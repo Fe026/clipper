@@ -27,39 +27,24 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     }
 }
 
-struct SettingsView: View {
-    @ObservedObject var clipboardManager: ClipboardManager
-    
-    @State private var modifierFlags: NSEvent.ModifierFlags = .command
-    @State private var keyCode: UInt16 = 9
+struct SettingsView<Manager: ClipboardManaging & ObservableObject>: View {
+    @ObservedObject var clipboardManager: Manager
     
     @State private var activeTab: SettingsTab = .general
     @State private var hoveredTab: SettingsTab? = nil
     
-    @Environment(\.colorScheme) var colorScheme
-    
-    init(clipboardManager: ClipboardManager) {
+    init(clipboardManager: Manager) {
         self.clipboardManager = clipboardManager
-        
-        let savedModifiersRaw = UserDefaults.standard.integer(forKey: UserDefaultsKeys.shortcutModifiers)
-        let savedModifiers = NSEvent.ModifierFlags(rawValue: UInt(savedModifiersRaw))
-        let savedKeyCode = UInt16(UserDefaults.standard.integer(forKey: UserDefaultsKeys.shortcutKeyCode))
-        
-        let modifier = savedModifiersRaw == 0 ? .command : savedModifiers
-        let code = savedModifiersRaw == 0 && savedKeyCode == 0 ? UInt16(9) : savedKeyCode
-        
-        _modifierFlags = State(initialValue: modifier)
-        _keyCode = State(initialValue: code)
     }
     
     var body: some View {
         HStack(spacing: 0) {
             // 1. サイドバー (左ペイン)
-            SidebarView(activeTab: $activeTab, hoveredTab: $hoveredTab, colorScheme: colorScheme)
+            SidebarView(activeTab: $activeTab, hoveredTab: $hoveredTab)
                 .applyGlassEffect(in: .rect(cornerRadius: 12), displayMode: .thick)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(colorScheme == .dark ? Color.black.opacity(0.15) : Color.black.opacity(0.03))
+                        .fill(ColorTheme.settingsSidebarBg)
                 )
                 .padding([.top, .bottom, .leading], 8)
             
@@ -82,7 +67,7 @@ struct SettingsView: View {
                         case .general:
                             GeneralSettingsView(clipboardManager: clipboardManager)
                         case .hotkey:
-                            HotkeySettingsView(modifierFlags: $modifierFlags, keyCode: $keyCode)
+                            HotkeySettingsView()
                         case .updates:
                             UpdateSettingsView()
                         case .about:
