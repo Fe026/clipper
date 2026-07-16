@@ -104,8 +104,12 @@ extension View {
     func applyGlassEffect(in shape: some Shape, displayMode: GlassEffectDisplayMode = .always) -> some View {
         switch displayMode {
         case .thick:
-            #if compiler(>=6.1)
-            self.glassEffect(in: shape)
+            #if canImport(SwiftUI, _version: 26.0)
+            if #available(macOS 26.0, *) {
+                self.glassEffect(in: shape)
+            } else {
+                self.background(.thickMaterial, in: shape)
+            }
             #else
             self.background(.thickMaterial, in: shape)
             #endif
