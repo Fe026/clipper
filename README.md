@@ -30,7 +30,8 @@ Clipperは、macOS向けにSwiftとSwiftUIのみを使用して開発された�
 
 ## 💻 動作環境 (System Requirements)
 
-- **OS**: macOS 14.0 (Sonoma) 以上（SwiftUIのLiquid Glass効果 / `.glassEffect` を使用しているため）
+- **OS**: macOS 27.0 以上（macOS 27 の Liquid Glass UI を使用しているため）
+- **Xcode**: Xcode 27 以降（macOS 27.0 SDK が必要）
 
 ---
 
@@ -52,7 +53,7 @@ ClipperはXcodeプロジェクトとして構成されているため、Xcodeを
 
 ### 1. Xcodeを使用する場合 (推奨)
 
-1.  **Xcodeの準備**: Mac App StoreなどからXcodeをインストールします。
+1.  **Xcodeの準備**: Mac App StoreなどからXcode 27以降をインストールします。
 2.  **プロジェクトを開く**: 本リポジトリのclipper.xcodeprojをXcodeで開きます。
 3.  **コンパイルと実行**:
     - メニューの `Product` > `Build`（または `Cmd + B`）でビルドします。

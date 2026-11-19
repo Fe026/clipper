@@ -5,9 +5,11 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     case hotkey = "hotkey"
     case updates = "updates"
     case about = "about"
-    
+
+    static let primaryTabs: [SettingsTab] = [.general, .hotkey, .updates]
+
     var id: String { self.rawValue }
-    
+
     var displayName: String {
         switch self {
         case .general: return "一般"
@@ -16,7 +18,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .about: return "このアプリについて"
         }
     }
-    
+
     var icon: String {
         switch self {
         case .general: return "slider.horizontal.3"
@@ -29,59 +31,48 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
 struct SettingsView<Manager: ClipboardManaging & ObservableObject>: View {
     @ObservedObject var clipboardManager: Manager
-    
+
     @State private var activeTab: SettingsTab = .general
-    @State private var hoveredTab: SettingsTab? = nil
-    
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
     init(clipboardManager: Manager) {
         self.clipboardManager = clipboardManager
     }
-    
+
     var body: some View {
-        HStack(spacing: 0) {
-            // 1. サイドバー (左ペイン)
-            SidebarView(activeTab: $activeTab, hoveredTab: $hoveredTab)
-                .applyGlassEffect(in: .rect(cornerRadius: 12), displayMode: .thick)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(ColorTheme.settingsSidebarBg)
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView(activeTab: $activeTab)
+                .navigationSplitViewColumnWidth(
+                    min: LayoutMetrics.settingsSidebarMinWidth,
+                    ideal: LayoutMetrics.settingsSidebarIdealWidth,
+                    max: LayoutMetrics.settingsSidebarMaxWidth
                 )
-                .padding([.top, .bottom, .leading], 8)
-            
-            // 2. 詳細コンテンツ (右ペイン)
-            VStack(alignment: .leading, spacing: 0) {
-                // 上部ヘッダー（ドラッグ可能領域、タイトルを表示）
-                HStack {
-                    Text(activeTab.displayName)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                    Spacer()
-                }
-                .padding(.top, 14)
-                .padding(.bottom, 12)
-                .padding(.horizontal, 16)
-                .frame(height: 48)
-                
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        switch activeTab {
-                        case .general:
-                            GeneralSettingsView(clipboardManager: clipboardManager)
-                        case .hotkey:
-                            HotkeySettingsView()
-                        case .updates:
-                            UpdateSettingsView()
-                        case .about:
-                            AboutSettingsView()
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 20)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .toolbar(removing: .sidebarToggle)
+        } detail: {
+            detailContent
+                .navigationTitle(activeTab.displayName)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 500, idealWidth: 500, maxWidth: .infinity, minHeight: 340, idealHeight: 340, maxHeight: .infinity)
-        .applyGlassEffect(in: .rect(cornerRadius: 0), displayMode: .thin)
-        .ignoresSafeArea(.container, edges: .top)
+        .navigationSplitViewStyle(.balanced)
+        .frame(
+            minWidth: LayoutMetrics.settingsWindowWidth,
+            idealWidth: LayoutMetrics.settingsWindowWidth,
+            minHeight: LayoutMetrics.settingsWindowHeight,
+            idealHeight: LayoutMetrics.settingsWindowHeight
+        )
+    }
+
+    @ViewBuilder
+    private var detailContent: some View {
+        switch activeTab {
+        case .general:
+            GeneralSettingsView(clipboardManager: clipboardManager)
+        case .hotkey:
+            HotkeySettingsView()
+        case .updates:
+            UpdateSettingsView()
+        case .about:
+            AboutSettingsView()
+        }
     }
 }

@@ -22,4 +22,7 @@ enum UserDefaultsKeys {
     
     /// ショートカットキーの表示用文字列 (String, "⌥Space" など)
     static let shortcutDisplayString = "shortcut_display_string"
+    
+    /// 監視を除外するアプリケーションの Bundle ID リスト ([String])
+    static let ignoredAppBundleIDs = "ignored_app_bundle_ids"
 }

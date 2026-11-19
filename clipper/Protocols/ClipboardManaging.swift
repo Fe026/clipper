@@ -8,4 +8,6 @@ protocol ClipboardManaging: AnyObject {
     func selectAndPaste(_ item: ClipboardItem)
     func clearHistory()
     func updateMaxItems(_ count: Int)
+    func togglePin(_ item: ClipboardItem)
+    func deleteItem(_ item: ClipboardItem)
 }

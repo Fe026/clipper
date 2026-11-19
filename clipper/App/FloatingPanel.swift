@@ -5,8 +5,14 @@ class FloatingPanel: NSPanel {
     var onClose: (() -> Void)?
     
     init<Content: View>(contentView: Content) {
+        let initialRect = NSRect(
+            x: 0,
+            y: 0,
+            width: LayoutMetrics.windowWidth,
+            height: LayoutMetrics.minWindowHeight
+        )
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 100),
+            contentRect: initialRect,
             styleMask: [.nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -26,9 +32,20 @@ class FloatingPanel: NSPanel {
         // ウィンドウ全体の透過設定
         self.isOpaque = false
         
+        // ウィンドウ外枠の Liquid Glass は AppKit の NSGlassEffectView で描画する
+        let glassView = NSGlassEffectView(frame: initialRect)
+        glassView.style = .regular
+        glassView.cornerRadius = LayoutMetrics.panelCornerRadius
+        glassView.autoresizingMask = [.width, .height]
+        
         // NSHostingView を使用 (サイズ変更はSwiftUI側からコールバックで制御)
         let hostingView = NSHostingView(rootView: contentView)
-        self.contentView = hostingView
+        hostingView.sizingOptions = []
+        hostingView.frame = glassView.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        glassView.contentView = hostingView
+        
+        self.contentView = glassView
     }
     
     // キー入力を受け取れるようにする

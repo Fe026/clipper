@@ -1,138 +1,99 @@
+import AppKit
 import SwiftUI
 
 // UI レイアウト定数 (パディングとマージンの一元管理)
 enum LayoutMetrics {
     // ウィンドウ全体・配置
-    static let windowWidth: CGFloat = 280         // ウィンドウ幅
+    static let windowWidth: CGFloat = 300         // ウィンドウ幅
+    static let minWindowHeight: CGFloat = 120     // ウィンドウ最小高さ
     static let maxWindowHeight: CGFloat = 480     // ウィンドウ最大高さ
-    static let windowHorizontal: CGFloat = 8      // ウィンドウ左右の基本マージン (検索バー、ScrollViewの左右配置)
-    
+    static let panelCornerRadius: CGFloat = 20    // パネルの連続角丸半径 (macOS 27)
+    static let windowHorizontal: CGFloat = 10     // ウィンドウ左右の基本マージン (検索バー、ScrollViewの左右配置)
+
+    // 設定ウィンドウ
+    static let settingsWindowWidth: CGFloat = 600      // 設定ウィンドウのデフォルト・最小幅
+    static let settingsWindowHeight: CGFloat = 420     // 設定ウィンドウのデフォルト・最小高さ
+    static let settingsSidebarMinWidth: CGFloat = 168  // サイドバー最小幅
+    static let settingsSidebarIdealWidth: CGFloat = 184 // サイドバー標準幅
+    static let settingsSidebarMaxWidth: CGFloat = 210  // サイドバー最大幅
+
     // 検索バー
-    static let searchBarTop: CGFloat = 8          // 検索バーの上方向余白
-    static let searchBarAreaHeight: CGFloat = 44  // 検索バー＋上マージンの合計高さ (ScrollView上部の潜り込み余白)
+    static let searchBarTop: CGFloat = 10               // 検索バーの上方向余白
+    static let searchBarBottomPadding: CGFloat = 8      // 検索エリア下部パディング
     static let searchBarHorizontalPadding: CGFloat = 12 // 検索バー内の左右余白
-    static let searchBarVerticalPadding: CGFloat = 8   // 検索バー内の上下余白
-    static let searchBarCornerRadius: CGFloat = 8      // 検索バーの角丸半径
-    static let searchBarFontSize: CGFloat = 13         // 検索テキストのフォントサイズ
-    static let searchBarBottomPadding: CGFloat = 8     // 検索エリア下部パディング
-    
+    static let searchBarVerticalPadding: CGFloat = 7    // 検索バー内の上下余白
+    static let searchBarFontSize: CGFloat = 13          // 検索テキストのフォントサイズ
+    static let searchBarOverlapMaxBlurRadius: CGFloat = 18 // 検索バー裏へ回り込んだ行の最大ぼかし半径
+    static let searchBarOverlapMinOpacity: Double = 0.35   // 検索バー裏へ回り込んだ行の最小不透明度
+
     // リスト
-    static let rowHeight: CGFloat = 30            // 各行アイテムの基本高さ
     static let listSpacing: CGFloat = 2           // リストアイテム間のスペース
-    static let scrollInsetTopOffset: CGFloat = 4  // スクロール上部追加インセット
-    static let scrollBottomPadding: CGFloat = 4   // スクロール下部追加パディング
-    
+    static let listTopPadding: CGFloat = 2        // スクロール上部追加パディング
+    static let scrollBottomPadding: CGFloat = 10  // スクロール下部追加パディング
+
     // リストアイテム（行全体）の配置
-    static let itemExternalHorizontal: CGFloat = 0 // 行アイテムの左右外側パディング (検索バーの端とハイライト端を揃えるため0)
     static let rowSpacing: CGFloat = 8            // 行内テキストとホバーバッジの間のスペース
-    static let rowCornerRadius: CGFloat = 6       // 行の角丸半径
-    
+    static let rowCornerRadius: CGFloat = 10      // 行の同心角丸最小半径 (20 - 10 = 10)
+
     // リストアイテム内部のフォントとパディング
-    static let itemInternalHorizontal: CGFloat = 8 // テキストの横余白
-    static let itemVertical: CGFloat = 4           // 表示密度を上げるための行の縦余白
-    static let rowTextFontSize: CGFloat = 12       // コピーテキストのフォントサイズ
-    static let badgeSpacing: CGFloat = 6           // バッジ間のスペース
-    static let badgeFontSize: CGFloat = 9          // アプリ名・時間表示のフォントサイズ
-    
-    // 仕切り線（Divider）のパディング
-    static let dividerHorizontal: CGFloat = 0      // テキスト開始位置と揃える余白
-    
+    static let itemInternalHorizontal: CGFloat = 10 // テキストの横余白
+    static let itemVertical: CGFloat = 6            // 行の縦余白
+    static let rowTextFontSize: CGFloat = 13        // コピーテキストのフォントサイズ
+    static let badgeSpacing: CGFloat = 6            // バッジ間のスペース
+    static let badgeFontSize: CGFloat = 10          // アプリ名・時間表示のフォントサイズ
+    static let badgeIconSize: CGFloat = 14          // アプリアイコンのサイズ
+    static let pinIconSize: CGFloat = 10            // ピン留めアイコンのサイズ
+    static let colorChipSize: CGFloat = 12          // カラーコードプレビューチップのサイズ
+    static let colorChipCornerRadius: CGFloat = 4   // カラーチップの角丸半径
+    static let contextMenuFontSize: CGFloat = 11    // コンテキストメニューのフォントサイズ
+
     // 空表示 (Empty View)
-    static let emptyViewSpacing: CGFloat = 6       // 空表示要素のスペース
-    static let emptyIconSize: CGFloat = 24         // 空表示のアイコンサイズ
-    static let emptyFontSize: CGFloat = 12         // 空表示のテキストフォントサイズ
-    static let emptyTopOffset: CGFloat = 20         // 空表示の上部オフセット
-    static let emptyBottomPadding: CGFloat = 24    // 空表示の下部パディング
+    static let emptyViewSpacing: CGFloat = 8      // 空表示要素のスペース
+    static let emptyIconSize: CGFloat = 26        // 空表示のアイコンサイズ
+    static let emptyFontSize: CGFloat = 13        // 空表示のテキストフォントサイズ
+    static let emptyVerticalPadding: CGFloat = 32 // 空表示の上下パディング
 }
 
-// SwiftUIの色定数 (色・グラデーションの一元管理)
+// SwiftUIの色定数 (色・適応カラーの一元管理)
 enum ColorTheme {
     // 基本テキスト・アイコン
     static let primaryText = Color.primary
     static let secondaryText = Color.secondary
-    static let tertiaryText = Color.primary.opacity(0.4)
-    
+
     // 空表示 (Empty View)
-    static let emptyIcon = Color.secondary.opacity(0.3)
+    static let emptyIcon = Color.secondary.opacity(0.4)
     static let emptyText = Color.secondary
-    
-    // 区切り線
-    static let divider = Color.primary.opacity(0.06)
-    
-    // 検索バー
+
+    // 検索バー (カプセル型埋め込みフィールド)
     static let searchBarText = Color.primary
     static let searchBarIcon = Color.secondary
     static let searchBarClearButton = Color.secondary
-    
+    static let searchBarFill = adaptiveColor(
+        light: NSColor.black.withAlphaComponent(0.05),
+        dark: NSColor.white.withAlphaComponent(0.10)
+    )
+    static let searchBarBorder = adaptiveColor(
+        light: NSColor.black.withAlphaComponent(0.08),
+        dark: NSColor.white.withAlphaComponent(0.12)
+    )
+    static let searchBarFocusedBorder = Color.accentColor.opacity(0.55)
+
     // リストアイテム
     static let rowText = Color.primary
-    static let rowHoverBg = Color.primary.opacity(0.08)
-    static let badgeSourceApp = Color.blue.opacity(0.8)
+    static let rowHoverBg = adaptiveColor(
+        light: NSColor.black.withAlphaComponent(0.07),
+        dark: NSColor.white.withAlphaComponent(0.11)
+    )
+    static let rowHoverBorder = adaptiveColor(
+        light: NSColor.black.withAlphaComponent(0.05),
+        dark: NSColor.white.withAlphaComponent(0.08)
+    )
+    static let badgeSourceApp = Color.secondary
     static let badgeTime = Color.secondary
-    
-    // 設定画面 (SettingsView) の動的カラー (システム外観に応じて自動切り替え)
-    static let settingsSidebarActiveBg = Color(NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor.white.withAlphaComponent(0.10)
-            : NSColor.black.withAlphaComponent(0.06)
-    })
-    
-    static let settingsSidebarActiveBorder = Color(NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor.white.withAlphaComponent(0.08)
-            : NSColor.black.withAlphaComponent(0.04)
-    })
-    
-    static let settingsSidebarActiveShadow = Color(NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor.black.withAlphaComponent(0.25)
-            : NSColor.black.withAlphaComponent(0.10)
-    })
-    
-    static let settingsSidebarHoverBg = Color(NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor.white.withAlphaComponent(0.04)
-            : NSColor.black.withAlphaComponent(0.02)
-    })
-    
-    static let settingsSidebarBg = Color(NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor.black.withAlphaComponent(0.15)
-            : NSColor.black.withAlphaComponent(0.03)
-    })
-}
 
-enum GlassEffectDisplayMode {
-    case always
-    case thin
-    case thick
-}
-
-extension View {
-    @ViewBuilder
-    func applyGlassEffect(in shape: some Shape, displayMode: GlassEffectDisplayMode = .always) -> some View {
-        #if compiler(>=6.2)
-        if #available(macOS 26.0, *) {
-            self.glassEffect(in: shape)
-        } else {
-            switch displayMode {
-            case .thick:
-                self.background(.thickMaterial, in: shape)
-            case .thin:
-                self.background(.thinMaterial, in: shape)
-            case .always:
-                self.background(.ultraThinMaterial, in: shape)
-            }
-        }
-        #else
-        switch displayMode {
-        case .thick:
-            self.background(.thickMaterial, in: shape)
-        case .thin:
-            self.background(.thinMaterial, in: shape)
-        case .always:
-            self.background(.ultraThinMaterial, in: shape)
-        }
-        #endif
+    private static func adaptiveColor(light: NSColor, dark: NSColor) -> Color {
+        Color(NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        })
     }
 }

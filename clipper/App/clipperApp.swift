@@ -89,54 +89,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let hostingController = NSHostingController(rootView: settingsView)
             
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 500, height: 340),
+                contentRect: NSRect(x: 0, y: 0, width: LayoutMetrics.settingsWindowWidth, height: LayoutMetrics.settingsWindowHeight),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
             window.title = "Clipper 設定"
-            window.titlebarAppearsTransparent = true
-            window.titleVisibility = .hidden
-            window.backgroundColor = .clear
-            window.isOpaque = false
-            window.hasShadow = true
-            window.isMovableByWindowBackground = true
+            window.toolbarStyle = .unified
+            window.titlebarSeparatorStyle = .none
             window.delegate = self
             window.contentViewController = hostingController
-            window.minSize = NSSize(width: 500, height: 340)
+            window.minSize = NSSize(width: LayoutMetrics.settingsWindowWidth, height: LayoutMetrics.settingsWindowHeight)
+            window.setContentSize(NSSize(width: LayoutMetrics.settingsWindowWidth, height: LayoutMetrics.settingsWindowHeight))
             window.center()
             window.isReleasedWhenClosed = false
             self.settingsWindow = window
-            
-            self.positionWindowButtons(for: window)
         }
         
         NSApp.activate()
         settingsWindow?.makeKeyAndOrderFront(nil)
-    }
-    
-    private func positionWindowButtons(for window: NSWindow) {
-        guard let closeButton = window.standardWindowButton(.closeButton) else { return }
-        // 注意: タイトルバーコンテナのトラバーサル（superview?.superview）は
-        // AppKit の非公開階層に依存しており、macOS の将来のバージョンで構造が変化する可能性があります。
-        if let titlebarContainer = closeButton.superview?.superview {
-            var frame = titlebarContainer.frame
-            frame.origin.x = 8
-            frame.origin.y = window.frame.height - frame.height - 8
-            titlebarContainer.frame = frame
-        }
-    }
-    
-    func windowDidResize(_ notification: Notification) {
-        if let window = notification.object as? NSWindow, window == settingsWindow {
-            positionWindowButtons(for: window)
-        }
-    }
-    
-    func windowDidBecomeKey(_ notification: Notification) {
-        if let window = notification.object as? NSWindow, window == settingsWindow {
-            positionWindowButtons(for: window)
-        }
     }
     
     func windowWillClose(_ notification: Notification) {

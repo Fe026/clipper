@@ -1,22 +1,28 @@
 import SwiftUI
 
-struct ViewSizeKey: PreferenceKey {
-    static var defaultValue: CGSize = .zero
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        value = nextValue()
-    }
-}
+private let panelCoordinateSpace = "clipperPanelRoot"
 
 struct ContentView<Manager: ClipboardManaging & ObservableObject>: View {
     @ObservedObject var clipboardManager: Manager
     @State private var searchText = ""
     @State private var hoveredItemId: UUID? = nil
-    
+
+    // キーボード選択用のインデックス
+    @State private var keyboardSelectedIndex: Int? = nil
+    @State private var isUsingKeyboard = false
+    @State private var keyboardLockTask: Task<Void, Never>? = nil
+
+    // 検索バーのフォーカスとウィンドウ高さ計算用状態
+    @FocusState private var isSearchFocused: Bool
+    @State private var contentHeight: CGFloat = 0
+    @State private var searchBarHeight: CGFloat = 0
+    @Environment(\.appearsActive) private var appearsActive
+
     // パネルを閉じるためのコールバック
     var onClose: (() -> Void)? = nil
     var onSizeChanged: ((CGSize) -> Void)? = nil
-    
-    // 検索語によるフィルタリング後のアイテム一覧（最大50件に制限）
+
+    // 検索語によるフィルタリング後のアイテム一覧（最大50件に制限、かつピン留め優先）
     private var filteredItems: [ClipboardItem] {
         let items: [ClipboardItem]
         if searchText.isEmpty {
@@ -24,155 +30,281 @@ struct ContentView<Manager: ClipboardManaging & ObservableObject>: View {
         } else {
             items = clipboardManager.items.filter { $0.text.localizedCaseInsensitiveContains(searchText) }
         }
-        return Array(items.prefix(AppConstants.Clipboard.maxFilteredItems))
+
+        // ピン留めされたものを常に最上位にソートする
+        let pinned = items.filter { $0.isPinned }
+        let unpinned = items.filter { !$0.isPinned }
+        let sorted = pinned + unpinned
+
+        return Array(sorted.prefix(AppConstants.Clipboard.maxFilteredItems))
     }
-    
-    // 検索バーの下層にリストを潜り込ませるための、スクロールビュー上部余白の計算
-    private var listScrollInsetTop: CGFloat {
-        LayoutMetrics.searchBarAreaHeight - LayoutMetrics.searchBarTop
-    }
-    
-    // 画面の最大表示可能範囲に収めたリストの高さ（ScrollView表示時の上限）
-    private var listVisibleHeight: CGFloat {
-        LayoutMetrics.maxWindowHeight - LayoutMetrics.searchBarTop
-    }
-    
+
     var body: some View {
-        VStack(spacing: 0) {
-            // 検索バーと履歴リストをZStackで重ねる (検索バーの下にリストが潜り込めるようにするため)
-            ZStack(alignment: .top) {
-                // 1. 履歴リスト / 空白表示 (下層に配置)
-                if filteredItems.isEmpty {
-                    emptyStateView
-                } else {
-                    clipboardListView
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                VStack(spacing: 0) {
+                    Color.clear
+                        .frame(height: 0)
+                        .id("top")
+
+                    if filteredItems.isEmpty {
+                        emptyStateView
+                    } else {
+                        VStack(spacing: LayoutMetrics.listSpacing) {
+                            listViewContent
+                        }
+                        .padding(.horizontal, LayoutMetrics.windowHorizontal)
+                        .padding(.top, LayoutMetrics.listTopPadding)
+                        .padding(.bottom, LayoutMetrics.scrollBottomPadding)
+                    }
                 }
-                
-                // 2. 検索バー (上層に配置)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
+                    guard abs(contentHeight - newHeight) > 0.5 else { return }
+                    contentHeight = newHeight
+                    notifySizeChange()
+                }
+            }
+            .scrollIndicators(.never)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollContentBackground(.hidden)
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
+            .safeAreaBar(edge: .top, spacing: 0) {
                 searchBarView
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
+                        guard abs(searchBarHeight - newHeight) > 0.5 else { return }
+                        searchBarHeight = newHeight
+                        notifySizeChange()
+                    }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .clipperPanelDidShow)) { _ in
+                proxy.scrollTo("top", anchor: .top)
+                keyboardSelectedIndex = nil
+                isSearchFocused = true
+            }
+            .onChange(of: keyboardSelectedIndex) { oldValue, newValue in
+                guard let index = newValue else { return }
+                if let old = oldValue {
+                    if index > old {
+                        // 下方向への移動：選択項目の「2つ先」が表示領域に入るように最小限スクロール
+                        let target = min(index + 2, filteredItems.count - 1)
+                        proxy.scrollTo(target, anchor: nil)
+                    } else if index < old {
+                        // 上方向への移動：先頭付近なら最上部("top")へ、それ以外は「2つ手前」が表示領域に入るように最小限スクロール
+                        if index <= 2 {
+                            proxy.scrollTo("top", anchor: nil)
+                        } else {
+                            let target = max(index - 2, 0)
+                            proxy.scrollTo(target, anchor: nil)
+                        }
+                    }
+                } else {
+                    if index <= 2 {
+                        proxy.scrollTo("top", anchor: nil)
+                    } else {
+                        proxy.scrollTo(index, anchor: nil)
+                    }
+                }
             }
         }
+        .opacity(appearsActive ? 1.0 : 0.85)
         .frame(width: LayoutMetrics.windowWidth)
-        // 1. まずVStack単体の自然な推奨サイズを測定する (これにより要素が少ないときにウィンドウが正しく縮みます)
-        .background(
-            GeometryReader { geo in
-                Color.clear
-                    .preference(key: ViewSizeKey.self, value: geo.size)
-            }
-        )
-        .onPreferenceChange(ViewSizeKey.self) { size in
-            let cappedHeight = min(size.height, LayoutMetrics.maxWindowHeight)
-            onSizeChanged?(CGSize(width: size.width, height: cappedHeight))
-        }
-        // 2. その後に最大高さを制限し、コンテンツを常に「上詰め(.top)」に配置する
         .frame(maxHeight: LayoutMetrics.maxWindowHeight, alignment: .top)
-        .applyGlassEffect(in: .rect(cornerRadius: 14.0), displayMode: .thick)
-        .clipShape(.rect(cornerRadius: 14.0))
+        .coordinateSpace(name: panelCoordinateSpace)
+        .containerShape(.rect(cornerRadius: LayoutMetrics.panelCornerRadius, style: .continuous))
+    }
+
+    private func notifySizeChange() {
+        guard searchBarHeight > 0, contentHeight > 0 else { return }
+        let totalHeight = searchBarHeight + contentHeight
+        let clampedHeight = min(max(totalHeight, LayoutMetrics.minWindowHeight), LayoutMetrics.maxWindowHeight)
+        onSizeChanged?(CGSize(width: LayoutMetrics.windowWidth, height: clampedHeight))
     }
 }
 
 // MARK: - Subviews
 extension ContentView {
-    
+
     private var emptyStateView: some View {
         VStack(spacing: LayoutMetrics.emptyViewSpacing) {
-            Image(systemName: "doc.on.clipboard")
+            Image(systemName: searchText.isEmpty ? "doc.on.clipboard" : "magnifyingglass")
                 .font(.system(size: LayoutMetrics.emptyIconSize))
-                .foregroundColor(ColorTheme.emptyIcon)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(ColorTheme.emptyIcon)
             Text(searchText.isEmpty ? "履歴がありません" : "見つかりませんでした")
-                .font(.system(size: LayoutMetrics.emptyFontSize, weight: .medium, design: .rounded))
-                .foregroundColor(ColorTheme.emptyText)
+                .font(.system(size: LayoutMetrics.emptyFontSize, weight: .medium))
+                .foregroundStyle(ColorTheme.emptyText)
         }
-        .padding(.top, LayoutMetrics.searchBarAreaHeight + LayoutMetrics.emptyTopOffset)
-        .padding(.bottom, LayoutMetrics.emptyBottomPadding)
+        .padding(.vertical, LayoutMetrics.emptyVerticalPadding)
         .frame(maxWidth: .infinity)
     }
-    private var clipboardListView: some View {
-        Group {
-            if filteredItems.count <= 10 {
-                // 10件以下の場合は、ScrollView を排除してスクロールやスクロールバーを物理的に排除する
-                VStack(spacing: 0) {
-                    Spacer()
-                        .frame(height: listScrollInsetTop + LayoutMetrics.scrollInsetTopOffset)
-                    
-                    VStack(spacing: LayoutMetrics.listSpacing) {
-                        listViewContent
-                    }
-                }
-                .padding(.bottom, LayoutMetrics.scrollBottomPadding)
-            } else {
-                // 10件を超える場合は、最大高さ制限付きの ScrollView で描画する
-                ScrollViewReader { proxy in
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 0) {
-                            Color.clear
-                                .frame(height: 0)
-                                .id("top")
-                            
-                            Spacer()
-                                .frame(height: listScrollInsetTop + LayoutMetrics.scrollInsetTopOffset)
-                            
-                            VStack(spacing: LayoutMetrics.listSpacing) {
-                                listViewContent
-                            }
-                        }
-                        .padding(.bottom, LayoutMetrics.scrollBottomPadding)
-                    }
-                    .onReceive(NotificationCenter.default.publisher(for: .clipperPanelDidShow)) { _ in
-                        proxy.scrollTo("top", anchor: .top)
-                    }
-                }
-                .frame(height: listVisibleHeight)
-            }
-        }
-        .padding(.horizontal, LayoutMetrics.windowHorizontal)
-        .padding(.top, LayoutMetrics.searchBarTop) // スクロールビュー自体を検索バーの上端（上マージン）まで下げて配置
-    }
-    
+
     @ViewBuilder
     private var listViewContent: some View {
         ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
-            ClipboardRow(item: item, isHovered: hoveredItemId == item.id) {
-                clipboardManager.selectAndPaste(item)
-                onClose?()
-            }
+            ClipboardRow(
+                item: item,
+                isHovered: hoveredItemId == item.id,
+                isSelected: keyboardSelectedIndex == index,
+                action: {
+                    clipboardManager.selectAndPaste(item)
+                    onClose?()
+                },
+                onPinToggle: {
+                    clipboardManager.togglePin(item)
+                },
+                onDelete: {
+                    clipboardManager.deleteItem(item)
+                    // 削除後にインデックスがズレるのを防ぐため、選択をリセットまたは調整
+                    if keyboardSelectedIndex == index {
+                        keyboardSelectedIndex = nil
+                    } else if let current = keyboardSelectedIndex, current > index {
+                        keyboardSelectedIndex = current - 1
+                    }
+                },
+                onPasteAsPlainText: {
+                    pasteAsPlainText(item)
+                }
+            )
+            .id(index) // ScrollViewReader でスクロールターゲットにするためのID
             .onHover { isHovered in
+                guard !isUsingKeyboard else { return }
                 withAnimation(.easeOut(duration: 0.1)) {
                     hoveredItemId = isHovered ? item.id : nil
+                    if isHovered {
+                        keyboardSelectedIndex = index
+                    }
                 }
             }
-            
-            if index < filteredItems.count - 1 {
+            .topEdgeProgressiveBlur(threshold: searchBarHeight, coordinateSpace: panelCoordinateSpace)
+
+            // ピン留めセクションと通常履歴の境界にのみ控えめな区切り線を配置
+            if item.isPinned && index < filteredItems.count - 1 && !filteredItems[index + 1].isPinned {
                 Divider()
-                    .background(ColorTheme.divider)
-                    .padding(.horizontal, LayoutMetrics.dividerHorizontal)
+                    .opacity(0.5)
+                    .padding(.horizontal, LayoutMetrics.itemInternalHorizontal)
+                    .padding(.vertical, 3)
+                    .topEdgeProgressiveBlur(threshold: searchBarHeight, coordinateSpace: panelCoordinateSpace)
             }
         }
     }
-    
+
     private var searchBarView: some View {
-        HStack {
+        HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .foregroundColor(ColorTheme.searchBarIcon)
-            
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(ColorTheme.searchBarIcon)
+
             TextField("検索", text: $searchText)
                 .textFieldStyle(.plain)
-                .foregroundColor(ColorTheme.searchBarText)
-                .font(.system(size: LayoutMetrics.searchBarFontSize, weight: .medium, design: .rounded))
-            
+                .focused($isSearchFocused)
+                .foregroundStyle(ColorTheme.searchBarText)
+                .font(.system(size: LayoutMetrics.searchBarFontSize, weight: .regular))
+                .onChange(of: searchText) { oldValue, newValue in
+                    keyboardSelectedIndex = nil
+                }
+                .onKeyPress(.downArrow) {
+                    moveSelection(down: true)
+                    return .handled
+                }
+                .onKeyPress(.upArrow) {
+                    moveSelection(down: false)
+                    return .handled
+                }
+                .onKeyPress(.return) {
+                    pasteSelected()
+                    return .handled
+                }
+
             if !searchText.isEmpty {
                 Button(action: { searchText = "" }) {
                     Image(systemName: "xmark.circle.fill")
-                       .foregroundColor(ColorTheme.searchBarClearButton)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(ColorTheme.searchBarClearButton)
                 }
                 .buttonStyle(.plain)
+                .help("検索をクリア")
             }
         }
         .padding(.horizontal, LayoutMetrics.searchBarHorizontalPadding)
         .padding(.vertical, LayoutMetrics.searchBarVerticalPadding)
-        .applyGlassEffect(in: .rect(cornerRadius: LayoutMetrics.searchBarCornerRadius), displayMode: .thin)
+        .background {
+            Capsule()
+                .fill(.thinMaterial)
+                .overlay {
+                    Capsule()
+                        .fill(ColorTheme.searchBarFill)
+                }
+        }
+        .overlay {
+            Capsule()
+                .strokeBorder(
+                    isSearchFocused ? ColorTheme.searchBarFocusedBorder : ColorTheme.searchBarBorder,
+                    lineWidth: isSearchFocused ? 1.0 : 0.5
+                )
+        }
         .padding(.horizontal, LayoutMetrics.windowHorizontal)
         .padding(.top, LayoutMetrics.searchBarTop)
+        .padding(.bottom, LayoutMetrics.searchBarBottomPadding)
+    }
+
+    // キーボードによる選択位置の移動
+    private func moveSelection(down: Bool) {
+        isUsingKeyboard = true
+        keyboardLockTask?.cancel()
+        keyboardLockTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000) // 300msロック
+            guard !Task.isCancelled else { return }
+            isUsingKeyboard = false
+        }
+
+        let count = filteredItems.count
+        guard count > 0 else { return }
+
+        if let current = keyboardSelectedIndex {
+            if down {
+                keyboardSelectedIndex = min(current + 1, count - 1)
+            } else {
+                keyboardSelectedIndex = max(current - 1, 0)
+            }
+        } else {
+            keyboardSelectedIndex = down ? 0 : count - 1
+        }
+    }
+
+    // 現在キーボードで選択しているアイテムをペースト
+    private func pasteSelected() {
+        guard let index = keyboardSelectedIndex, index < filteredItems.count else { return }
+        let item = filteredItems[index]
+        clipboardManager.selectAndPaste(item)
+        onClose?()
+    }
+
+    // プレーンテキストとしてペースト
+    private func pasteAsPlainText(_ item: ClipboardItem) {
+        clipboardManager.selectAndPaste(item.asPlainText())
+        onClose?()
     }
 }
 
+private extension View {
+    func topEdgeProgressiveBlur(threshold: CGFloat, coordinateSpace: String) -> some View {
+        let maxBlurRadius = LayoutMetrics.searchBarOverlapMaxBlurRadius
+        let minOpacity = LayoutMetrics.searchBarOverlapMinOpacity
+        return self.visualEffect { content, proxy in
+            let eased: Double
+            if threshold > 0 {
+                let minY = proxy.frame(in: .named(coordinateSpace)).minY
+                let overlap = max(0, threshold - minY)
+                let blurRange = max(threshold * 0.75, 34)
+                let t = min(overlap / blurRange, 1)
+                eased = Double(t * t * (3 - 2 * t))
+            } else {
+                eased = 0
+            }
+            return content
+                .blur(radius: CGFloat(eased) * maxBlurRadius)
+                .opacity(1 - eased * (1 - minOpacity))
+        }
+    }
+}

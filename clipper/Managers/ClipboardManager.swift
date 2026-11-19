@@ -5,6 +5,13 @@ import Combine
 
 @MainActor
 class ClipboardManager: ObservableObject, ClipboardManaging {
+    /// 初回起動時に監視除外として登録する Bundle ID（パスワードマネージャー等）
+    static let defaultIgnoredAppBundleIDs = [
+        "com.agilebits.onepassword",
+        "com.bitwarden.desktop",
+        "com.apple.keychainaccess"
+    ]
+
     @Published var items: [ClipboardItem] = []
     
     private let pasteboard = NSPasteboard.general
@@ -18,6 +25,12 @@ class ClipboardManager: ObservableObject, ClipboardManaging {
     init() {
         let savedMax = UserDefaults.standard.integer(forKey: UserDefaultsKeys.maxItems)
         self.maxItems = savedMax == 0 ? 1000 : savedMax
+        
+        // デフォルトの監視除外アプリを登録
+        if UserDefaults.standard.object(forKey: UserDefaultsKeys.ignoredAppBundleIDs) == nil {
+            UserDefaults.standard.set(Self.defaultIgnoredAppBundleIDs, forKey: UserDefaultsKeys.ignoredAppBundleIDs)
+        }
+        
         self.changeCount = pasteboard.changeCount
         loadItems()
         startMonitoring()
@@ -71,13 +84,22 @@ class ClipboardManager: ObservableObject, ClipboardManaging {
             logger.debug("RTF Data size: \(rtfData?.count ?? 0) bytes")
             logger.debug("HTML Data size: \(htmlData?.count ?? 0) bytes")
             
-            // コピー元のアプリ名を取得（可能な場合）
-            var sourceAppName: String? = nil
-            if let activeApp = NSWorkspace.shared.frontmostApplication {
-                sourceAppName = activeApp.localizedName
+            // コピー元のアプリ名と Bundle ID を取得（可能な場合）
+            let activeApp = NSWorkspace.shared.frontmostApplication
+            let sourceAppName = activeApp?.localizedName
+            let sourceAppBundleID = activeApp?.bundleIdentifier
+            
+            // 除外対象のアプリケーションならスキップ
+            if let bundleID = sourceAppBundleID, isIgnoredApp(bundleID) {
+                logger.debug("Ignoring copy from application: \(bundleID, privacy: .public)")
+                return
             }
             
-            let newItem = ClipboardItem(text: text, type: .text, rtfData: rtfData, htmlData: htmlData, sourceApp: sourceAppName)
+            let newItem = ClipboardItem(
+                text: text, type: .text,
+                rtfData: rtfData, htmlData: htmlData,
+                sourceApp: sourceAppName, sourceAppBundleID: sourceAppBundleID
+            )
             addItem(newItem)
         }
     }
@@ -86,12 +108,8 @@ class ClipboardManager: ObservableObject, ClipboardManaging {
         // すでに同じ内容がある場合は古いものを削除して、最新として先頭に持ってくる
         self.items.removeAll { $0.text == item.text }
         self.items.insert(item, at: 0)
-        
-        // 上限数を超えたら削除
-        if self.items.count > self.maxItems {
-            self.items = Array(self.items.prefix(self.maxItems))
-        }
-        
+
+        enforceMaxItems()
         self.saveItems()
     }
     
@@ -104,15 +122,7 @@ class ClipboardManager: ObservableObject, ClipboardManaging {
         }
         
         // タイムスタンプを現在の時刻に更新し、リストの先頭に移動する
-        let updatedItem = ClipboardItem(
-            id: item.id,
-            text: item.text,
-            type: item.type,
-            timestamp: Date(),
-            rtfData: item.rtfData,
-            htmlData: item.htmlData,
-            sourceApp: item.sourceApp
-        )
+        let updatedItem = item.withCurrentTimestamp()
         
         // クリップボード書き込みとペーストの実行は PasteService に委譲する
         PasteService.shared.paste(item: updatedItem)
@@ -125,7 +135,27 @@ class ClipboardManager: ObservableObject, ClipboardManaging {
         self.saveItems()
     }
     
-    // 永続化関連
+    // ピン留め状態をトグルする
+    func togglePin(_ item: ClipboardItem) {
+        guard let index = self.items.firstIndex(where: { $0.id == item.id }) else { return }
+        self.items[index] = self.items[index].togglingPin()
+        self.saveItems()
+    }
+    
+    // 特定のアイテムを履歴から削除する
+    func deleteItem(_ item: ClipboardItem) {
+        self.items.removeAll { $0.id == item.id }
+        self.saveItems()
+    }
+    
+    // 除外対象アプリケーションの判定
+    private func isIgnoredApp(_ bundleID: String) -> Bool {
+        let ignoredList = UserDefaults.standard.stringArray(forKey: UserDefaultsKeys.ignoredAppBundleIDs) ?? []
+        return ignoredList.contains(bundleID)
+    }
+    
+    // MARK: - 永続化
+    
     private var historyFileURL: URL? {
         guard let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return nil
@@ -213,11 +243,15 @@ class ClipboardManager: ObservableObject, ClipboardManaging {
     func updateMaxItems(_ count: Int) {
         self.maxItems = count
         UserDefaults.standard.set(count, forKey: UserDefaultsKeys.maxItems)
-        
-        // 上限数を超えたら削除
-        if self.items.count > count {
-            self.items = Array(self.items.prefix(count))
-            self.saveItems()
+        enforceMaxItems(saveIfTrimmed: true)
+    }
+
+    /// 上限数を超えた古い履歴を削除する
+    private func enforceMaxItems(saveIfTrimmed: Bool = false) {
+        guard items.count > maxItems else { return }
+        items = Array(items.prefix(maxItems))
+        if saveIfTrimmed {
+            saveItems()
         }
     }
 }

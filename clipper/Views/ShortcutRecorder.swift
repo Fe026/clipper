@@ -83,43 +83,55 @@ class RecorderNSView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         
-        let path = NSBezierPath(roundedRect: bounds, xRadius: 5, yRadius: 5)
+        let rect = bounds.insetBy(dx: 1, dy: 1)
+        let radius = rect.height / 2
+        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
         
         if isRecording {
+            NSColor.controlAccentColor.withAlphaComponent(0.14).setFill()
             NSColor.controlAccentColor.setStroke()
-            NSColor.textBackgroundColor.setFill()
-            path.lineWidth = 2
-        } else if isHovered {
-            NSColor.selectedControlColor.setStroke()
-            NSColor.controlBackgroundColor.setFill()
             path.lineWidth = 1.5
+        } else if isHovered {
+            NSColor.labelColor.withAlphaComponent(0.08).setFill()
+            NSColor.labelColor.withAlphaComponent(0.18).setStroke()
+            path.lineWidth = 1.0
         } else {
-            NSColor.separatorColor.setStroke()
-            NSColor.controlBackgroundColor.setFill()
-            path.lineWidth = 1
+            NSColor.labelColor.withAlphaComponent(0.05).setFill()
+            NSColor.separatorColor.withAlphaComponent(0.6).setStroke()
+            path.lineWidth = 0.75
         }
         
         path.fill()
         path.stroke()
         
-        let text = isRecording ? "キーを押してください..." : (displayString.isEmpty ? "未設定" : displayString)
+        let isEmpty = displayString.isEmpty
+        let text = isRecording ? "キーを押してください..." : (isEmpty ? "未設定" : displayString)
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
         
+        let textColor: NSColor
+        if isRecording {
+            textColor = .controlAccentColor
+        } else if isEmpty {
+            textColor = .secondaryLabelColor
+        } else {
+            textColor = .labelColor
+        }
+        
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 13, weight: isRecording ? .semibold : .regular),
-            .foregroundColor: isRecording ? NSColor.controlAccentColor : NSColor.labelColor,
+            .font: NSFont.systemFont(ofSize: 12, weight: isRecording ? .semibold : .medium),
+            .foregroundColor: textColor,
             .paragraphStyle: paragraphStyle
         ]
         
         let size = text.size(withAttributes: attrs)
-        let rect = NSRect(
+        let textRect = NSRect(
             x: 0,
             y: (bounds.height - size.height) / 2,
             width: bounds.width,
             height: size.height
         )
-        text.draw(in: rect, withAttributes: attrs)
+        text.draw(in: textRect, withAttributes: attrs)
     }
     
     override func mouseDown(with event: NSEvent) {

@@ -19,22 +19,40 @@ class PanelManager: PanelManaging {
     }
     
     private var previousActiveApp: NSRunningApplication?
+    private var pendingSize: CGSize?
+    private var isSizeUpdateScheduled = false
     
     private func updatePanelSize(_ size: CGSize) {
+        pendingSize = size
+        guard !isSizeUpdateScheduled else { return }
+        isSizeUpdateScheduled = true
+        
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.isSizeUpdateScheduled = false
+                guard let targetSize = self.pendingSize else { return }
+                self.pendingSize = nil
+                self.applyPanelSize(targetSize)
+            }
+        }
+    }
+    
+    private func applyPanelSize(_ size: CGSize) {
         guard let panel = panel else { return }
         
         var frame = panel.frame
         let oldHeight = frame.size.height
         let newHeight = size.height
         
-        if abs(oldHeight - newHeight) > 0.5 {
+        if abs(oldHeight - newHeight) > 0.5 || abs(frame.size.width - size.width) > 0.5 {
             let diff = newHeight - oldHeight
             // macOSは左下が原点のため、ウィンドウの上端が変わらないようにY座標を調整
             frame.origin.y -= diff
             frame.size.height = newHeight
             frame.size.width = size.width
             
-            panel.setFrame(frame, display: true, animate: false)
+            panel.setFrame(frame, display: false, animate: false)
         }
     }
     
@@ -54,6 +72,11 @@ class PanelManager: PanelManaging {
         if let frontmost = NSWorkspace.shared.frontmostApplication,
            frontmost.bundleIdentifier != Bundle.main.bundleIdentifier {
             self.previousActiveApp = frontmost
+        }
+        
+        if let targetSize = pendingSize {
+            pendingSize = nil
+            applyPanelSize(targetSize)
         }
         
         let mouseLocation = NSEvent.mouseLocation
